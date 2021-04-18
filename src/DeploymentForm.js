@@ -1,10 +1,11 @@
 import React from 'react';
 import axios from 'axios';
+import MicroservicesStatus from './MicroservicesStatus'
 
 class DeploymentForm extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { payload: '', answer: '' };
+    this.state = { payload: '', answer: '', message: '' };
 
     this.handleChange = this.handleChange.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
@@ -16,19 +17,39 @@ class DeploymentForm extends React.Component {
 
   handleSubmit(event) {
     event.preventDefault();
-    const payload = JSON.parse(this.state.payload)
-    axios.post('http://localhost:8080/deploy', payload)
-      .then(res => {
-        this.setState({ answer: res.data.data.value})
-      })
+    this.handlePayload('http://localhost:8080/deploy', res => {
+      this.setState({ answer: res.data.data, message: 'OK' })
+    });
   }
 
-  renderPostResult() {
-    return this.state.answer.order.map((n)=>(<p><b>{n}</b>: {this.state.answer.microservices[n].map(o=>o.id)}</p>))
+  dryRun(event) {
+    this.handlePayload('http://localhost:8080/deploy?dryRun', res => {
+      this.setState({ message: `Is Cyclic: ${res.data.data.cyclic}` })
+    });
+  }
+
+  handlePayload(url, resolution){
+    if (!this.state.payload) {
+      this.setState({ message: "Need some input" });
+      return;
+    }
+    try {
+      const payload = JSON.parse(this.state.payload)
+      axios.post(url, payload)
+        .then(resolution)
+        .catch((error)=>{
+          console.log(`Problem with the server response: ${error}`)
+          this.setState({ message: `No good`, answer: ''})
+          return Promise.reject(error);
+        })
+    } catch (e) {
+      console.log(e);
+      this.setState({ message: "Problem with input or program" });
+      return;
+    }
   }
 
   render() {
-    const answer = this.state.answer ? this.renderPostResult() : null
     return (
       <div>
         <form onSubmit={this.handleSubmit}>
@@ -38,9 +59,11 @@ class DeploymentForm extends React.Component {
           </label>
           <p />
           <input type="submit" value="Deploy" />
+          <input type="button" value="Dry Run" onClick={() => this.dryRun()} />
         </form>
+        <div>{this.state.message}</div>
         <h2>Instances</h2>
-        {answer}
+        <MicroservicesStatus answer={this.state.answer}/>
 
       </div>
     );
